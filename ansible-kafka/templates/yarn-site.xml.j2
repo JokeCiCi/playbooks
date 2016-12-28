@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<configuration>
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>{{ yarn_nodemanager_aux_services }}</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.address</name>
+    <value>{{ yarn_resourcemanager_address }}</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.scheduler.address</name>
+    <value>{{ yarn_resourcemanager_scheduler_address }}</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.resource-tracker.address</name>
+    <value>{{ yarn_resourcemanager_resource_tracker_address }}</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.admin.address</name>
+    <value>{{ yarn_resourcemanager_admin_address }}</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.webapp.address</name>
+    <value>{{ yarn_resourcemanager_webapp_address }}</value>
+  </property>
+  <property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>{{ yarn_log_aggregation_enable }}</value>
+  </property>
+  <property>
+    <name>yarn.log.server.url</name>
+    <value>{{ yarn_log_server_url }}</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>{{ yarn_nodemanager_resource_memory_mb }}</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.maximum-allocation-mb</name>
+    <value>{{ yarn_scheduler_maximum_allocation_mb }}</value>
+  </property>
+</configuration>

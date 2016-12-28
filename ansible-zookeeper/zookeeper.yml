@@ -1,0 +1,91 @@
+---
+
+- name: install zookeeper
+  hosts: zookeeper_all
+  sudo: True
+  environment:
+    JAVA_HOME: /usr/java/latest
+  vars:
+    package_home: "/packages"
+    package_name: "zookeeper-3.4.9"
+    package_suffix: "tar.gz"
+    package_version: "3.4.9"
+    remote_home: "/tmp"
+    install_home: "/opt"
+    unzip_name: "{{ package_name }}"
+    link_name: "zookeeper"
+    data_root: "/data/zookeeper"
+    log_root: "/var/log/zookeeper"
+
+    dataDir: "{{ data_root }}/data"
+    tickTime: "2000"
+    initLimit: "10"
+    syncLimit: "5"
+    clientPort: "2181"
+
+    ZOO_LOG_DIR: "{{ log_root }}"
+    zookeeper_root_logger: "INFO, ROLLINGFILE"
+
+    hadoop_tar_url: "http://mirrors.cnnic.cn/apache/zookeeper/zookeeper-{{ package_version }}/{{ package_name }}.{{ package_suffix }}"
+    
+  tasks:
+    - name: remove data
+      file: path="{{item}}" state=absent
+      with_items:
+        - "{{ install_home }}/{{ link_name }}"
+        - "{{ install_home }}/{{ unzip_name }}"
+        - "{{ data_root }}"
+        - "{{ log_root }}"
+      tags:
+        - uninstall
+    - name: copy {{ package_home }}/{{ package_name }}.{{ package_suffix }} to remote server
+      copy: src={{ package_home }}/{{ package_name }}.{{ package_suffix }} dest={{ remote_home }} remote_src=False
+      tags:
+        - install
+    - name: unzip {{ remote_home }}/{{ package_name }}.{{ package_suffix }}
+      unarchive: src={{ remote_home }}/{{ package_name }}.{{ package_suffix }}  dest={{ install_home }}/ copy=no
+      tags:
+        - install
+    - name: create directory {{ dataDir }}
+      file: path="{{ dataDir }}" state=directory
+      tags:
+        - install
+    - name: update config files to remote server
+      template: src={{ item.src }} dest={{ item.dest }} force=yes
+      with_items:
+        - { src: "zoo.cfg.j2", dest: "{{ install_home }}/{{ unzip_name }}/conf/zoo.cfg" }
+        - { src: "log4j.properties.j2", dest: "{{ install_home }}/{{ unzip_name }}/conf/log4j.properties" }
+        - { src: "zkEnv.sh.j2", dest: "{{ install_home }}/{{ unzip_name }}/bin/zkEnv.sh" }
+        - { src: "myid.j2", dest: "{{ dataDir }}/myid" }
+      tags:
+        - install
+    - name: create soft link {{ link_name }} to {{ unzip_name }}
+      file: src={{ install_home }}/{{ unzip_name }} dest={{ install_home }}/{{ link_name }} state=link
+      tags:
+        - install
+    - name: update profile
+      lineinfile: dest=/etc/profile regexp={{ item.regexp }} line={{ item.line }} state=present
+      with_items:
+        - { regexp: "^ZOOKEEPER_HOME=", line: "ZOOKEEPER_HOME={{ install_home }}/{{ link_name }}" }
+        - { regexp: "^export PATH=\\${PATH}:\\${ZOOKEEPER_HOME}/bin", line: "export PATH=${PATH}:${ZOOKEEPER_HOME}/bin" }
+      tags:
+        - install
+    - name: recovery profile
+      lineinfile: dest=/etc/profile regexp={{ item.regexp }} state=absent
+      with_items:
+        - { regexp: "^ZOOKEEPER_HOME=", line: "ZOOKEEPER_HOME={{ install_home }}/{{ link_name }}" }
+        - { regexp: "^export PATH=\\${PATH}:\\${ZOOKEEPER_HOME}/bin", line: "export PATH=${PATH}:${ZOOKEEPER_HOME}/bin" }
+      tags:
+        - uninstall
+    - name: start zookeeper
+      shell: chdir="{{ install_home }}/{{ unzip_name }}" bin/zkServer.sh start
+      tags:
+        - start
+    - name: status zookeeper
+      shell: chdir="{{ install_home }}/{{ unzip_name }}" bin/zkServer.sh status
+      tags:
+        - status
+    - name: stop zookeeper
+      shell: chdir="{{ install_home }}/{{ unzip_name }}" bin/zkServer.sh stop
+      tags:
+        - stop

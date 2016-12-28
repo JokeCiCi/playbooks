@@ -1,0 +1,15 @@
+---
+
+- name: update hostname
+  hosts: ansible_all
+  sudo: True
+  vars:
+    ansible_server_hostname: "ansible_server"
+    hostname_pre: "n"
+  tasks:
+    - name: change ansible server hostname {{ ansible_server_hostname }}
+      hostname: name={{ ansible_server_hostname }}
+      when: inventory_hostname in groups['ansible_server']
+    - name: change ansible client hostname n{{ ansible_default_ipv4.address.split('.')[-1] }}
+      hostname: name={{ hostname_pre }}{{ ansible_default_ipv4.address.split('.')[-1] }}
+      when: inventory_hostname in groups['ansible_client']

@@ -1,0 +1,25 @@
+[ansible_all:children]
+ansible_server
+ansible_client
+
+[ansible_server]
+192.168.0.111 ansible_ssh_host=192.168.0.111 ansible_ssh_pass=1
+
+[ansible_client]
+192.168.0.207
+192.168.0.208
+192.168.0.209
+
+[ansible_client:vars]
+ansible_ssh_pass=?root?
+
+[hadoop_all:children]
+hadoop_master
+hadoop_slaves
+
+[hadoop_master]
+192.168.0.111
+
+[hadoop_slaves]
+192.168.0.112
+192.168.0.113

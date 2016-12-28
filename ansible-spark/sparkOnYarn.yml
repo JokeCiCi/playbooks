@@ -1,0 +1,76 @@
+---
+
+- name: install spark on yarn
+  hosts: spark_all
+  sudo: True
+  environment:
+    JAVA_HOME: /usr/java/latest
+  vars:
+    package_home: "/packages"
+    package_name: "spark-1.6.2-bin-hadoop2.6"
+    package_suffix: "tgz"
+    package_version: "1.6.2"
+    remote_home: "/tmp"
+    install_home: "/opt"
+    unzip_name: "{{ package_name }}"
+    link_name: "spark"
+
+#    spark_assembly_jar: "spark-assembly-1.6.2-hadoop2.6.0.jar"
+#    hdfs_root: "hdfs://{{ hostvars['192.168.0.111'].ansible_default_ipv4.address }}:9000"
+
+    HADOOP_CONF_DIR: "/opt/hadoop/etc/hadoop"
+    spark_yarn_historyServer_address: "{{ hostvars['192.168.0.111'].ansible_default_ipv4.address }}:18080"
+    spark_history_ui_port: "18080"
+    spark_eventLog_enabled: "true"
+    spark_eventLog_dir: "hdfs:///tmp/spark/events"
+    spark_history_fs_logDirectory: "hdfs:///tmp/spark/events"
+
+#    spark_yarn_jar: "hdfs:///system/spark/jars/{{ spark_assembly_jar }}"
+
+#    hadoop_tar_url: "https://dist.apache.org/repos/dist/release/hadoop/common/{{ hadoop_package_name }}/{{ hadoop_package_name }}.tar.gz"
+    
+  tasks:
+    - name: remove data
+      file: path="{{item}}" state=absent
+      with_items:
+        - "{{ install_home }}/{{ link_name }}"
+        - "{{ install_home }}/{{ unzip_name }}"
+      tags:
+        - uninstall
+    - name: copy {{ package_name }}.{{ package_suffix }} to remote server
+      copy: src={{ package_home }}/{{ package_name }}.{{ package_suffix }} dest={{ remote_home }} remote_src=False
+      tags:
+        - install
+    - name: unzip {{ package_name }}.{{ package_suffix }}
+      unarchive: src={{ remote_home }}/{{ package_name }}.{{ package_suffix }}  dest={{ install_home }}/ copy=no
+      tags:
+        - install
+    - name: update config files to remote server
+      template: src={{item}}.j2 dest={{ install_home }}/{{ unzip_name }}/conf/{{ item }} force=yes
+      with_items:
+        - "spark-env.sh"
+        - "spark-defaults.conf"
+      tags:
+        - install
+    - name: create link {{ link_name }} to {{ unzip_name }}
+      file: src={{ install_home }}/{{ unzip_name }} dest={{ install_home }}/{{ link_name }} state=link
+      tags:
+        - install
+    - name: update profile
+      lineinfile: dest=/etc/profile regexp={{ item.regexp }} line={{ item.line }} state=present
+      with_items:
+        - { regexp: "^SPARK_HOME=", line: "SPARK_HOME={{ install_home }}/{{ link_name }}" }
+        - { regexp: "^export PATH=\\${PATH}:\\${SPARK_HOME}/bin", line: "export PATH=${PATH}:${SPARK_HOME}/bin" }
+      tags:
+        - install
+    - name: mkdir spark eventLog dir {{ spark_eventLog_dir }}
+      shell: chdir="/opt/hadoop" bin/hdfs dfs -mkdir -p {{ spark_eventLog_dir }}
+      tags:
+        - install
+    - name: recovery profile
+      lineinfile: dest=/etc/profile regexp={{ item.regexp }} state=absent
+      with_items:
+        - { regexp: "^SPARK_HOME=", line: "SPARK_HOME={{ install_home }}/{{ link_name }}" }
+        - { regexp: "^export PATH=\\${PATH}:\\${SPARK_HOME}/bin", line: "export PATH=${PATH}:${SPARK_HOME}/bin" }
+      tags:
+        - uninstall

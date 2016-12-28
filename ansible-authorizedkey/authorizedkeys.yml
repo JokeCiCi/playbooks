@@ -1,0 +1,18 @@
+---
+
+- name: operate authronizedkeys
+  hosts: authorizedkeys_all
+  sudo: True
+  tasks:
+    - name: register public key
+      shell: cat ~/.ssh/id_rsa.pub
+      register: public_key
+      when: inventory_hostname in groups['authorizedkeys_server']
+    - set_fact: id_rsa_pub={{ public_key.stdout }}
+      when: inventory_hostname in groups['authorizedkeys_server']
+    - name: create directory
+      file: path="~/.ssh" state=directory
+    - name: sync authorized_keys
+      template: src={{ item }}.j2 dest=~/.ssh/{{ item }} force=yes
+      with_items:
+        - "authorized_keys"

@@ -1,0 +1,3 @@
+{% for host in groups['authorizedkeys_server'] %}
+{{ hostvars[host].id_rsa_pub }}
+{% endfor %}

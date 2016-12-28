@@ -1,0 +1,57 @@
+---
+
+- name: install java
+  hosts: java_all
+  sudo: True
+  vars:
+    package_home: "/packages"
+    package_name: "jdk-8u111-linux-x64"
+    package_suffix: "rpm"
+    package_version: "8u111-b14"
+    remote_home: "/tmp"
+    install_home: "/opt"
+    unzip_name: ""
+    link_name: ""
+
+    download_cookie: "Cookie: s_nr=1480576934943; ELOQUA=GUID=F1CC400EA4CC4406AA297732FD56E2F3; s_cc=true; oraclelicense=accept-securebackup-cookie; gpw_e24=http%3A%2F%2Fwww.oracle.com%2Ftechnetwork%2Fjava%2Fjavase%2Fdownloads%2Fjdk8-downloads-2133151.html; s_sq=%5B%5BB%5D%5D"
+    java_rpm_url: "http://download.oracle.com/otn-pub/java/jdk/{{ package_version }}/{{ package_name }}.{{ package_suffix }}"
+
+  tasks:
+    - name: remove exists jdk
+      yum: name="{{ item }}" state=absent
+      with_items:
+        - "java-1.6.0-openjdk-1.6.0.38-1.13.10.4.el6.x86_64"
+        - "java-1.7.0-openjdk-1.7.0.51-2.4.5.5.el7.x86_64"
+        - "java-1.7.0-openjdk-1.7.0.99-2.6.5.1.el6.x86_64"
+        - "java-1.7.0-openjdk-headless-1.7.0.51-2.4.5.5.el7.x86_64"
+        - "java-1.6.0-openjdk-devel-1.6.0.38-1.13.10.4.el6.x86_64"
+        - "java-1.7.0-openjdk-devel-1.7.0.99-2.6.5.1.el6.x86_64"
+        - "jdk1.8.0_40-1.8.0_40-fcs.x86_64"
+        - "jdk1.8.0_60-1.8.0_60-fcs.x86_64"
+        - "jdk1.8.0_111-1.8.0_111-fcs.x86_64"
+      tags:
+        - uninstall
+    - name: copy {{ package_name }}.{{ package_suffix }} to remote server
+      copy: src={{ package_home }}/{{ package_name }}.{{ package_suffix }} dest={{ remote_home }} remote_src=False
+      tags:
+        - install
+    - name: install java
+      yum: name={{ remote_home }}/{{ package_name }}.{{ package_suffix }} state=present
+      tags:
+        - install
+    - name: update bashrc
+      lineinfile: dest=/etc/bashrc regexp={{ item.regexp }} line={{ item.dest }} state=present
+      with_items:
+        - { regexp: "^export JAVA_HOME=", dest: "export JAVA_HOME=/usr/java/latest" }
+      tags:
+        - install
+    - name: recovery bashrc
+      lineinfile: dest=/etc/bashrc regexp={{ item.regexp }} state=absent
+      with_items:
+        - { regexp: "^export JAVA_HOME=", dest: "export JAVA_HOME=/usr/java/latest" }
+      tags:
+        - uninstall
+    - name: correct java version selected
+      alternatives: name=java path=/usr/java/latest/bin/java link=/usr/bin/java
+      tags:
+        - install

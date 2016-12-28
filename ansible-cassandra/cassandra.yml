@@ -1,0 +1,101 @@
+---
+
+- name: install cassandra
+  hosts: cassandra_all
+  sudo: True
+  environment:
+    JAVA_HOME: /usr/java/latest
+  vars:
+    package_home: ""
+    package_name: "dsc30"
+    package_suffix: ""
+    package_version: ""
+    remote_home: ""
+    install_home: ""
+    unzip_name: ""
+    link_name: ""
+    data_root: "/data/cassandra"
+    log_root: "/var/log/cassandra"
+
+    package_tool_name: "cassandra30-tools"
+    package_cassandra_name: "cassandra30"
+
+    cluster_name: "wisemedia_cluster"
+
+    hints_directory: "{{ data_root }}/hints"
+    data_file_directories: "{{ data_root }}/data"
+    commitlog_directory: "{{ data_root }}/commitlog"
+    saved_caches_directory: "{{ data_root }}/saved_caches"
+
+    seeds: "{{ groups.cassandra_all | join(',') }}"
+
+    listen_address: "{{ inventory_hostname }}"
+    broadcast_address: "{{ inventory_hostname }}"
+    rpc_address: "{{ inventory_hostname }}"
+    broadcast_rpc_address: "{{ inventory_hostname }}"
+    endpoint_snitch: "SimpleSnitch"
+    
+    
+    tar_url: "http://mirrors.hust.edu.cn/apache/cassandra/{{ package_versioin }}/{{ apache-cassandra-3.7-bin }}.{{ package_suffix }}"
+    
+  tasks:
+    - name: setup datastax repository
+      template: src={{ item }}.j2 dest=/etc/yum.repos.d/{{ item }}
+      with_items:
+        - "datastax.repo"
+      tags:
+        - install
+    - name: install cassandra and dependency
+      yum: name="{{ item }}" state=present update_cache=yes
+      with_items:
+        - "{{ package_name }}"
+        - "{{ package_tool_name }}"
+      tags:
+        - install
+    - name: remove data
+      file: path="{{ item }}" state=absent
+      with_items:
+        - "{{ data_root }}"
+        - "/etc/yum.repos.d/datastax.repo"
+      tags:
+        - uninstall
+    - name: update config files to remote server
+      template: src="{{ item }}.j2" dest="/etc/cassandra/conf/{{ item }}" force=yes
+      with_items:
+        - "cassandra.yaml"
+        - "cassandra-env.sh"
+      tags:
+        - install
+    - name: reload systemd
+      shell: "sudo systemctl daemon-reload"
+      tags:
+        - install
+    - name: mkdir
+      file: path="{{item}}" state=directory owner=cassandra group=cassandra
+      with_items:
+        - "{{ hints_directory }}"
+        - "{{ data_file_directories }}"
+        - "{{ commitlog_directory }}"
+        - "{{ saved_caches_directory }}"
+      tags:
+        - install
+    - name: start cassandra daemon
+      service: name=cassandra state=started
+      tags:
+        - start
+    - name: restart cassandra daemon
+      service: name=cassandra state=restarted
+      tags:
+        - restart
+    - name: stop  cassandra daemon
+      service: name=cassandra state=stopped
+      tags:
+        - stop
+    - name: remove package
+      yum: name="{{ item }}" state=absent
+      with_items:
+        - "{{ package_tool_name }}"
+        - "{{ package_cassandra_name }}"
+        - "{{ package_name }}"
+      tags:
+        - uninstall

@@ -1,0 +1,155 @@
+---
+
+- name: install hadoop
+  hosts: hadoop_all
+  sudo: True
+  environment:
+    JAVA_HOME: /usr/java/latest
+  vars:
+    package_home: "/packages"
+    package_name: "hadoop-2.6.0"
+    package_suffix: "tar.gz"
+    package_version: "2.6.0"
+    remote_home: "/tmp"
+    install_home: "/opt"
+    unzip_name: "{{ package_name }}"
+    link_name: "hadoop"
+    data_root: "/data/hdfs"
+    log_root: ""
+
+    namenode_hostname: "{{ hostvars['192.168.0.111'].ansible_default_ipv4.address }}"
+    yarn_hostname: "{{ namenode_hostname }}"
+    jobhistory_hostname: "{{ namenode_hostname }}"
+
+    fs_defaultFS: "hdfs://{{ namenode_hostname }}:9000"
+    hadoop_tmp_dir: "{{ data_root }}"
+
+    dfs_replication: "3"
+    dfs_namenode_name_dir: "file://{{ hadoop_tmp_dir }}/dfs/name"
+    dfs_datanode_data_dir: "file://{{ hadoop_tmp_dir }}/dfs/data"
+    dfs_namenode_checkpoint_dir: "file://{{ hadoop_tmp_dir }}/dfs/namesecondary"
+    
+    yarn_nodemanager_aux_services: "mapreduce_shuffle"
+    yarn_resourcemanager_address: "{{ yarn_hostname }}:8032"
+    yarn_resourcemanager_scheduler_address: "{{ yarn_hostname }}:8030"
+    yarn_resourcemanager_resource_tracker_address: "{{ yarn_hostname }}:8035"
+    yarn_resourcemanager_admin_address: "{{ yarn_hostname }}:8033"
+    yarn_resourcemanager_webapp_address: "{{ yarn_hostname }}:8088"
+    yarn_log_aggregation_enable: "true"
+    yarn_log_server_url: "http://{{ yarn_hostname }}:19888/jobhistory/logs"
+    yarn_nodemanager_resource_memory_mb: "12288"
+    yarn_scheduler_maximum_allocation_mb: "12288"
+
+    mapreduce_framework_name: "yarn"
+    mapreduce_jobhistory_address: "{{ jobhistory_hostname }}:10020"
+    mapreduce_jobhistory_webapp_address: "{{ jobhistory_hostname }}:19888"
+    
+    hadoop_tar_url: "https://dist.apache.org/repos/dist/release/hadoop/common/{{ hadoop_package_name }}/{{ hadoop_package_name }}.{{ package_suffix }}"
+    
+  tasks:
+    - name: Remove require tty
+      lineinfile: regexp="^\s+\w+\s+requiretty" dest=/etc/sudoers state=absent
+      tags:
+        - install
+    - name: Remove require tty - alt
+      lineinfile: regexp="requiretty" dest=/etc/sudoers.d/os_defaults state=absent
+      tags:
+        - install
+    - name: Disable Selinux
+      selinux: state=disabled
+      tags:
+        - install
+      ignore_errors: yes
+    - name: Stop firewalld
+      service: name=firewalld state=stopped
+      tags:
+        - install
+      ignore_errors: yes
+    - name: install wget
+      yum: name=wget state=present
+      tags:
+        - install
+    - name: remove old data
+      file: path="{{item}}" state=absent
+      with_items:
+        - "{{ install_home }}/{{ link_name }}"
+        - "{{ install_home }}/{{ unzip_name }}"
+        - "{{ data_root }}"
+      tags:
+        - uninstall
+    - name: copy {{ package_home }}/{{ package_name }}.{{ package_suffix }} to remote server
+      copy: src={{ package_home }}/{{ package_name }}.{{ package_suffix }} dest={{ remote_home }} remote_src=False
+      tags:
+        - install
+    - name: unzip {{ remote_home }}/{{ package_name }}.{{ package_suffix }}
+      unarchive: src={{ remote_home }}/{{ package_name }}.{{ package_suffix }}  dest={{ install_home }}/ copy=no
+      tags:
+        - install
+    - name: update config files to remote server
+      template: src={{ item }}.j2 dest={{ install_home }}/{{ unzip_name }}/etc/hadoop/{{ item }} force=yes
+      with_items:
+        - "core-site.xml"
+        - "yarn-site.xml"
+        - "mapred-site.xml"
+        - "hdfs-site.xml"
+        - "slaves"
+      tags:
+        - install
+        - upconfig
+    - name: Copy native_x64 lib to hadoop
+      copy: src=files/native dest={{ install_home }}/{{ unzip_name }}/lib
+      tags:
+        - install
+    - name: create soft link {{ link_name }} to {{ unzip_name }}
+      file: src={{ install_home }}/{{ unzip_name }} dest={{ install_home }}/{{ link_name }} state=link
+      tags:
+        - install
+    - name: update profile
+      lineinfile: dest=/etc/profile regexp={{ item.regexp }} line={{ item.dest }} state=present
+      with_items:
+        - { regexp: "^HADOOP_HOME=", dest: "HADOOP_HOME={{ install_home }}/{{ link_name }}" }
+        - { regexp: "^export PATH=${PATH}:${HADOOP_HOME}/bin", dest: "export PATH=${PATH}:${HADOOP_HOME}/bin" }
+      tags:
+        - install
+    - name: recovery profile
+      lineinfile: dest=/etc/profile regexp={{ item.regexp }} state=absent
+      with_items:
+        - { regexp: "^HADOOP_HOME=", dest: "HADOOP_HOME={{ install_home }}/{{ link_name }}" }
+        - { regexp: "^export PATH=\\${PATH}:\\${HADOOP_HOME}/bin", dest: "export PATH=\\${PATH}:\\${HADOOP_HOME}/bin" }
+      tags:
+        - uninstall
+    - name: format hadoop namenode
+      shell: chdir="{{ install_home }}/{{ link_name }}" bin/hadoop namenode -format
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - install
+    - name: start hadoop dfs
+      shell: chdir="{{ install_home }}/{{ link_name }}" sbin/start-dfs.sh
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - start
+    - name: start hadoop yarn
+      shell: chdir="{{ install_home }}/{{ link_name }}" sbin/start-yarn.sh
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - start
+    - name: start mapreduce job history
+      shell: chdir="{{ install_home }}/{{ link_name }}" sbin/mr-jobhistory-daemon.sh start historyserver
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - start
+    - name: stop hadoop dfs
+      shell: chdir="{{ install_home }}/{{ link_name }}" sbin/stop-dfs.sh
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - stop
+    - name: start hadoop yarn
+      shell: chdir="{{ install_home }}/{{ link_name }}" sbin/stop-yarn.sh
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - stop
+    - name: start mapreduce job history
+      shell: chdir="{{ install_home }}/{{ link_name }}" sbin/mr-jobhistory-daemon.sh stop historyserver
+      when: inventory_hostname in groups['hadoop_master']
+      tags:
+        - stop
